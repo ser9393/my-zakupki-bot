@@ -9,14 +9,12 @@ from flask import Flask
 
 BOT_TOKEN = "8546161737:AAGD5lxNL8cmt7nIkfBY-dlQyShscbgyqsw"
 
-# --- Веб-сервер для Render ---
 app = Flask(__name__)
 
 @app.route('/')
 def index():
     return "Bot is running!"
 
-# --- Бот ---
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -55,15 +53,16 @@ async def handle_url(message: types.Message):
         await msg.edit_text(f"❌ Ошибка при чтении: {str(e)}")
 
 async def main():
-    # Запускаем бота в фоновой задаче
-    bot_task = asyncio.create_task(dp.start_polling(bot))
+    # Запускаем Flask в отдельном потоке, чтобы он занял порт
+    import threading
+    def run_flask():
+        port = int(os.environ.get("PORT", 10000))
+        app.run(host="0.0.0.0", port=port, debug=False)
     
-    # Запускаем Flask в основном потоке (Render это увидит)
-    port = int(os.environ.get("PORT", 10000))
-    print(f"Веб-сервер запущен на порту {port}, бот работает в фоне.")
-    app.run(host="0.0.0.0", port=port)
+    threading.Thread(target=run_flask, daemon=True).start()
     
-    await bot_task
+    print("Flask запущен, бот начинает polling...")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
