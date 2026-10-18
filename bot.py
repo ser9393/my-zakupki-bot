@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import threading
 import requests
 from bs4 import BeautifulSoup
 from aiogram import Bot, Dispatcher, types
@@ -10,7 +9,7 @@ from flask import Flask
 
 BOT_TOKEN = "8546161737:AAGD5lxNL8cmt7nIkfBY-dlQyShscbgyqsw"
 
-# --- Flask для Render (запускается в основном потоке) ---
+# --- Flask (заглушка для Render) ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -43,16 +42,10 @@ async def handle_url(message: types.Message):
     except Exception as e:
         await msg.edit_text(f"❌ Ошибка при чтении: {str(e)}")
 
-def run_bot():
-    # Запускаем бота в отдельном потоке
+# --- Функция запуска бота для Gunicorn ---
+def start_bot():
     asyncio.run(dp.start_polling(bot))
 
-# --- Главный запуск ---
-if __name__ == "__main__":
-    # 1. Бот в фоне
-    threading.Thread(target=run_bot, daemon=True).start()
-    
-    # 2. Flask в основном потоке (Render увидит порт)
-    port = int(os.environ.get("PORT", 10000))
-    print(f"Flask запущен на порту {port}")
-    app.run(host="0.0.0.0", port=port)
+# Запускаем бота в фоне при старте Gunicorn
+import threading
+threading.Thread(target=start_bot, daemon=True).start()
