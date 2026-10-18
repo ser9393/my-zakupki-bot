@@ -6,25 +6,17 @@ from bs4 import BeautifulSoup
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from flask import Flask
-from threading import Thread
 
 BOT_TOKEN = "8546161737:AAGD5lxNL8cmt7nIkfBY-dlQyShscbgyqsw"
 
-# --- ЗАГЛУШКА ДЛЯ RENDER (чтобы не было ошибки порта) ---
+# --- Веб-сервер для Render ---
 app = Flask(__name__)
+
 @app.route('/')
 def index():
     return "Bot is running!"
 
-def run_web_server():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-# -----------------------------------------------------
-
-# --- ПРОКСИ (если найдете рабочий, вставьте сюда) ---
-PROXY_URL = None  # Например: "http://45.132.193.226:8080"
-# ---------------------------------------------------
-
+# --- Бот ---
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -44,13 +36,7 @@ async def handle_url(message: types.Message):
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        
-        # Если прокси указан, используем его
-        proxies = None
-        if PROXY_URL:
-            proxies = {"http": PROXY_URL, "https": PROXY_URL}
-        
-        response = requests.get(url, headers=headers, timeout=15, proxies=proxies)
+        response = requests.get(url, headers=headers, timeout=15)
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -69,10 +55,15 @@ async def handle_url(message: types.Message):
         await msg.edit_text(f"❌ Ошибка при чтении: {str(e)}")
 
 async def main():
-    # Запускаем веб-сервер в фоне, чтобы Render был доволен
-    Thread(target=run_web_server).start()
-    print("Бот запущен и веб-сервер работает!")
-    await dp.start_polling(bot)
+    # Запускаем бота в фоновой задаче
+    bot_task = asyncio.create_task(dp.start_polling(bot))
+    
+    # Запускаем Flask в основном потоке (Render это увидит)
+    port = int(os.environ.get("PORT", 10000))
+    print(f"Веб-сервер запущен на порту {port}, бот работает в фоне.")
+    app.run(host="0.0.0.0", port=port)
+    
+    await bot_task
 
 if __name__ == "__main__":
     asyncio.run(main())
