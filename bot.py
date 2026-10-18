@@ -5,18 +5,15 @@ import requests
 from bs4 import BeautifulSoup
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from flask import Flask
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 
 BOT_TOKEN = "8546161737:AAGD5lxNL8cmt7nIkfBY-dlQyShscbgyqsw"
+# Ваш URL на Render
+WEBHOOK_HOST = "https://zakupki-bot-78oq.onrender.com" 
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
-# --- Flask (заглушка для Render) ---
-app = Flask(__name__)
-
-@app.route('/')
-def index():
-    return "Bot is running!"
-
-# --- Бот ---
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -42,10 +39,24 @@ async def handle_url(message: types.Message):
     except Exception as e:
         await msg.edit_text(f"❌ Ошибка при чтении: {str(e)}")
 
-# --- Функция запуска бота для Gunicorn ---
-def start_bot():
-    asyncio.run(dp.start_polling(bot))
+async def on_startup(app):
+    await bot.set_webhook(WEBHOOK_URL)
+    logging.info(f"Webhook установлен на {WEBHOOK_URL}")
 
-# Запускаем бота в фоне при старте Gunicorn
-import threading
-threading.Thread(target=start_bot, daemon=True).start()
+async def on_shutdown(app):
+    await bot.delete_webhook()
+
+def main():
+    app = web.Application()
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+    
+    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+    
+    port = int(os.environ.get("PORT", 10000))
+    logging.info(f"Запуск сервера на порту {port}")
+    web.run_app(app, host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    main()
