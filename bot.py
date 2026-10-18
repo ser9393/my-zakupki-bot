@@ -7,6 +7,10 @@ from aiogram.filters import Command
 
 BOT_TOKEN = "8546161737:AAGD5lxNL8cmt7nIkfBY-dlQyShscbgyqsw"
 
+# --- ВСТАВЬТЕ СЮДА ВАШ РОССИЙСКИЙ ПРОКСИ ---
+PROXY_URL = "http://31.172.215.67:1080"  # <--- ЗАМЕНИТЕ НА АКТУАЛЬНЫЙ
+# ------------------------------------------
+
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -24,7 +28,15 @@ async def handle_url(message: types.Message):
     msg = await message.answer("⏳ Собираю данные...")
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        response = requests.get(url, headers=headers, timeout=15)
+        
+        proxies = {
+            "http": PROXY_URL,
+            "https": PROXY_URL,
+        }
+        
+        # Добавляем proxies в запрос
+        response = requests.get(url, headers=headers, timeout=15, proxies=proxies)
+        
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             text_content = soup.get_text()
@@ -47,4 +59,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-  
