@@ -18,7 +18,7 @@ dp = Dispatcher()
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("Привет! Отправь мне ссылку на аукцион с mos.ru.")
+    await message.answer("Привет! Отправь мне ссылку на аукцион с mos.ru (например: https://zakupki.mos.ru/auction/10321376)")
 
 @dp.message()
 async def handle_url(message: types.Message):
@@ -33,7 +33,7 @@ async def handle_url(message: types.Message):
         await message.answer("Не удалось понять номер аукциона из ссылки.")
         return
 
-    msg = await message.answer("⏳ Запрашиваю данные с сервера госзакупок...")
+    msg = await message.answer("⏳ Запрашиваю данные через API госзакупок...")
     
     try:
         # Официальный API портала mos.ru
@@ -47,7 +47,6 @@ async def handle_url(message: types.Message):
         
         if response.status_code == 200:
             data = response.json()
-            # Пытаемся достать цену, название и заказчика
             name = data.get('name', 'Неизвестный товар')
             price = data.get('startPrice', 'Неизвестно')
             customer = data.get('customer', {}).get('name', 'Неизвестный заказчик')
