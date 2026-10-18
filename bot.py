@@ -1,15 +1,10 @@
 import asyncio
 import logging
 import requests
-from bs4 import BeautifulSoup
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
 BOT_TOKEN = "8546161737:AAGD5lxNL8cmt7nIkfBY-dlQyShscbgyqsw"
-
-# --- ПРОКСИ (если не сработает, замените на другой IP) ---
-PROXY_URL = "http://45.132.193.226:8080" 
-# --------------------------------------------------------
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
@@ -17,47 +12,46 @@ dp = Dispatcher()
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("Привет! Отправь мне ссылку с mos.ru, и я проверю данные.")
+    await message.answer("Привет! Отправь мне ссылку на аукцион с mos.ru (например: https://zakupki.mos.ru/auction/10321376)")
 
 @dp.message()
 async def handle_url(message: types.Message):
     url = message.text.strip()
-    if "zakupki.mos.ru" not in url:
-        await message.answer("Пожалуйста, отправь ссылку с сайта zakupki.mos.ru")
+    if "zakupki.mos.ru/auction/" not in url:
+        await message.answer("Пожалуйста, отправь правильную ссылку на аукцион.")
         return
     
-    msg = await message.answer("⏳ Собираю данные (это может занять до 15 секунд)...")
+    # Вытаскиваем номер аукциона из ссылки
+    try:
+        auction_id = url.split('/auction/')[1].split('?')[0]
+    except:
+        await message.answer("Не удалось понять номер аукциона из ссылки.")
+        return
+
+    msg = await message.answer("⏳ Запрашиваю данные с сервера госзакупок...")
     
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        
-        proxies = {
-            "http": PROXY_URL,
-            "https": PROXY_URL,
+        # Используем официальный API портала mos.ru (он реже блокирует)
+        api_url = f"https://zakupki.mos.ru/newapi/api/Auction/GetAuction?id={auction_id}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json'
         }
         
-        # Запрос через прокси
-        response = requests.get(url, headers=headers, timeout=15, proxies=proxies)
+        response = requests.get(api_url, headers=headers, timeout=15)
         
         if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            text_content = soup.get_text()
+            data = response.json()
+            # Пытаемся достать цену и название
+            name = data.get('name', 'Неизвестный товар')
+            price = data.get('startPrice', 'Неизвестно')
             
-            answer = f"✅ Страница открыта!\n\n"
-            
-            # Ищем цену
-            if "Текущая цена" in text_content:
-                answer += "💰 Нашел блок с ценой на странице.\n"
-            else:
-                answer += "💰 Блок с ценой не найден.\n"
-                
-            # Ищем ставки
-            if "Ставок:" in text_content:
-                answer += "📊 Нашел информацию о ставках.\n"
-            
-            await msg.edit_text(answer)
+            answer = f"✅ **Данные найдены!**\n\n"
+            answer += f"📦 Товар: {name}\n"
+            answer += f"💰 Начальная цена: {price} ₽\n"
+            await msg.edit_text(answer, parse_mode="Markdown")
         else:
-            await msg.edit_text(f"❌ Сайт ответил с ошибкой. Код: {response.status_code}")
+            await msg.edit_text(f"❌ Ошибка API. Сайт ответил кодом: {response.status_code}")
             
     except Exception as e:
         await msg.edit_text(f"❌ Ошибка при чтении: {str(e)}")
