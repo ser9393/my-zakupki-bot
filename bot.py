@@ -10,14 +10,14 @@ from flask import Flask
 
 BOT_TOKEN = "8546161737:AAGD5lxNL8cmt7nIkfBY-dlQyShscbgyqsw"
 
-# --- Flask-заглушка для Render ---
+# --- Flask для Render (запускается в основном потоке) ---
 app = Flask(__name__)
 
 @app.route('/')
 def index():
     return "Bot is running!"
 
-# --- Логика бота ---
+# --- Бот ---
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -37,22 +37,22 @@ async def handle_url(message: types.Message):
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         response = requests.get(url, headers=headers, timeout=15)
         if response.status_code == 200:
-            await msg.edit_text("✅ Страница открыта! (Но данные могут не отобразиться из-за блокировки IP)")
+            await msg.edit_text("✅ Страница открыта! (Данные могут не отобразиться из-за блокировки IP)")
         else:
             await msg.edit_text(f"❌ Ошибка доступа. Код: {response.status_code}")
     except Exception as e:
         await msg.edit_text(f"❌ Ошибка при чтении: {str(e)}")
 
 def run_bot():
-    # Запускаем бота в отдельном потоке, чтобы он не блокировал Flask
+    # Запускаем бота в отдельном потоке
     asyncio.run(dp.start_polling(bot))
 
 # --- Главный запуск ---
 if __name__ == "__main__":
-    # 1. Запускаем бота в фоне
+    # 1. Бот в фоне
     threading.Thread(target=run_bot, daemon=True).start()
     
-    # 2. Запускаем Flask в основном потоке (это увидит Render)
+    # 2. Flask в основном потоке (Render увидит порт)
     port = int(os.environ.get("PORT", 10000))
-    print(f"Flask запущен на порту {port}, бот работает в фоне.")
+    print(f"Flask запущен на порту {port}")
     app.run(host="0.0.0.0", port=port)
