@@ -2,179 +2,87 @@ import asyncio
 import logging
 import os
 import requests
-from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
-from openai import AsyncOpenAI
-from flask import Flask
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 
-# ==========================================
-# КЛЮЧИ БЕРУТСЯ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ RENDER
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-YANDEX_API_KEY = os.getenv("YANDEX_API_KEY")
-YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
-DAMIA_API_KEY = os.getenv("DAMIA_API_KEY")
-# ==========================================
+BOT_TOKEN = "8546161737:AAGD5lxNL8cmt7nIkfBY-dlQyShscbgyqsw"
+DAMIA_KEY = "1174ab6b3317737c801bed5996269efd852417d9"
 
-app = Flask(__name__)
-
-@app.route('/')
-def index():
-    return "Bot is running!"
+# URL вашего сервиса на Render (я вижу его на скриншоте)
+WEBHOOK_HOST = "https://zakupki-bot-ai.onrender.com" 
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
 logging.basicConfig(level=logging.INFO)
-bot = Bot(token=TELEGRAM_TOKEN)
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-
-client = AsyncOpenAI(
-    api_key=YANDEX_API_KEY,
-    base_url="https://llm.api.cloud.yandex.net/v1",
-)
-
-SYSTEM_PROMPT = "Ты — строгий и профессиональный финансовый аналитик по госзакупкам."
-
-CITIES = {
-    "москва": "77", "питер": "78", "санкт-петербург": "78", "новосибирск": "54",
-    "екатеринбург": "66", "казань": "16", "набережные челны": "16", "менделеевск": "16",
-    "нижний новгород": "52", "челябинск": "74", "самара": "63", "омск": "55",
-    "ростов-на-дону": "61", "уфа": "02", "красноярск": "24", "воронеж": "36",
-    "пермь": "59", "волгоград": "34", "краснодар": "23", "сочи": "23",
-    "саратов": "64", "тюмень": "72", "тольятти": "63"
-}
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer(
-        "👋 Привет! Я твой ИИ-ассистент.\n\n"
-        "🔹 Напиши **«закупка [слово] [город]»** — найду свежие закупки.\n"
-        "🔹 /calc [цена] [себестоимость] — посчитать маржу\n"
-        "Или просто задай любой вопрос!"
-    )
+    await message.answer("Привет! Я бот для поиска закупок через DaMIA. Отправь команду:\n/search <товар> (например: /search медбол)")
 
-@dp.message(Command("calc"))
-async def cmd_calc(message: types.Message):
-    parts = message.text.split()
-    if len(parts) < 3:
-        await message.answer("❌ Формат: /calc 9751.50 6000")
+@dp.message(Command("search"))
+async def cmd_search(message: types.Message):
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("❌ Укажи товар. Пример: /search медбол")
         return
-    try:
-        price = float(parts[1])
-        cost = float(parts[2])
-        margin = price - cost
-        margin_pct = (margin / price) * 100 if price > 0 else 0
-        
-        if margin < 0: status = "🔴 УБЫТОК! Не ставь."
-        elif margin_pct < 10: status = "🟡 КРАЙНЕ РИСКОВАННО."
-        elif margin_pct < 20: status = "🟢 Нормально."
-        else: status = "🟢 ВЫГОДНО."
-            
-        await message.answer(
-            f"💰 Выручка: <code>{price:,.2f} ₽</code>\n"
-            f"📦 Себестоимость: <code>{cost:,.2f} ₽</code>\n"
-            f"📈 Маржа: <code>{margin:,.2f} ₽</code> ({margin_pct:.1f}%)\n\n"
-            f"{status}", parse_mode=ParseMode.HTML
-        )
-    except ValueError:
-        await message.answer("❌ Ошибка. Введи числа.")
-
-@dp.message()
-async def handle_ai(message: types.Message):
-    text = message.text.strip()
-    text_lower = text.lower()
     
-    if text_lower.startswith("закупка"):
-        parts = text.split(maxsplit=1)
-        if len(parts) < 2:
-            await message.answer("❌ Напиши: закупка [слово] [город]")
-            return
-        
-        query_and_city = parts[1].split()
-        region_code = None
-        query = query_and_city[0]
-        
-        if len(query_and_city) > 1:
-            city_name = " ".join(query_and_city[1:]).lower()
-            if city_name in CITIES:
-                region_code = CITIES[city_name]
-                query = query_and_city[0]
-            else:
-                query = " ".join(query_and_city) 
-        
-        msg = await message.answer(f"⏳ Ищу закупки по слову '{query}'...")
-        
-        try:
-            url = "https://api.damia.ru/zakupki/zsearch"
-            today = datetime.now()
-            month_ago = today - timedelta(days=30)
-            
-            params = {
-                "q": query, "fz": "44", "key": DAMIA_API_KEY,
-                "from_date": month_ago.strftime("%Y-%m-%d"),
-                "to_date": today.strftime("%Y-%m-%d")
-            }
-            if region_code: params["region"] = region_code
-            
-            response = requests.get(url, params=params, timeout=30)
-            
-            if response.status_code == 200:
-                data = response.json()
-                results = []
-                
-                # УНИВЕРСАЛЬНАЯ ОБРАБОТКА (словарь или список)
-                if "44" in data:
-                    group = data["44"]
-                    if isinstance(group, dict):
-                        for reg_num, tender in group.items():
-                            results.append({
-                                "regNumber": reg_num,
-                                "name": tender.get("Продукт", "Без названия"),
-                                "maxPrice": tender.get("Сумма", "?"),
-                                "date": tender.get("ДатаПубл", "?")
-                            })
-                    elif isinstance(group, list):
-                        for tender in group:
-                            results.append({
-                                "regNumber": tender.get("regNumber", "?"),
-                                "name": tender.get("product", "Без названия"),
-                                "maxPrice": tender.get("maxPrice", "?"),
-                                "date": tender.get("publishDate", "?")
-                            })
-                
-                if not results:
-                    await msg.edit_text(f"По запросу '{query}' ничего не найдено.")
-                    return
-                
-                answer = f"🔎 Найдено: {len(results)}\n\n"
-                for t in results[:5]:
-                    answer += f"📦 <b>{t['name']}</b>\n💰 НМЦ: {t['maxPrice']} ₽\n📅 {t['date']}\n🔗 <a href='https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber={t['regNumber']}'>Ссылка</a>\n\n"
-                
-                await msg.edit_text(answer, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-            else:
-                await msg.edit_text(f"❌ Ошибка DaMIA: {response.status_code}")
-        except Exception as e:
-            await msg.edit_text(f"❌ Ошибка: {e}")
-        return
-
-    await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
+    query = parts[1]
+    msg = await message.answer(f"⏳ Ищу закупки по запросу: {query}...")
+    
     try:
-        response = await client.chat.completions.create(
-            model=f"gpt://{YANDEX_FOLDER_ID}/yandexgpt-lite",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.3,
-        )
-        await message.answer(response.choices[0].message.content)
+        url = f"https://api.damia.ru/zakupki/zsearch?q={query}&key={DAMIA_KEY}"
+        response = requests.get(url, timeout=20)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if "44" in data and data["44"]:
+                answer = f"✅ **Найдены закупки по запросу '{query}':**\n\n"
+                count = 0
+                for reg_number, info in data["44"].items():
+                    if count >= 5: break
+                    
+                    product = info.get("Продукт", "Без названия")
+                    price = info.get("Сумма", 0)
+                    date = info.get("ДатаПубл", "—")
+                    status = info.get("Статус", "Неизвестно")
+                    
+                    answer += f"📦 **{product}**\n"
+                    answer += f"💰 Сумма: {price:,.2f} ₽\n"
+                    answer += f"📅 Дата: {date} | Статус: {status}\n"
+                    answer += f"🔗 [Открыть в ЕИС](https://zakupki.gov.ru/epz/order/notice/notice44/common-info.html?regNumber={reg_number})\n\n"
+                    count += 1
+                
+                await msg.edit_text(answer, parse_mode=ParseMode.MARKDOWN)
+            else:
+                await msg.edit_text(f"По запросу '{query}' ничего не найдено.")
+        else:
+            await msg.edit_text(f"❌ Ошибка API: {response.status_code}")
+            
     except Exception as e:
-        await message.answer(f"Ошибка ИИ: {e}")
+        await msg.edit_text(f"❌ Ошибка: {str(e)}")
 
-def run_bot():
-    asyncio.run(dp.start_polling(bot))
+async def on_startup(app):
+    await bot.set_webhook(WEBHOOK_URL)
+    logging.info(f"Webhook установлен на {WEBHOOK_URL}")
+
+async def on_shutdown(app):
+    await bot.delete_webhook()
+
+def main():
+    app = web.Application()
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+    
+    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+    
+    port = int(os.environ.get("PORT", 10000))
+    web.run_app(app, host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    import threading
-    threading.Thread(target=run_bot, daemon=True).start()
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    main()
