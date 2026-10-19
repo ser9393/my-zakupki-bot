@@ -17,7 +17,6 @@ YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 DAMIA_API_KEY = os.getenv("DAMIA_API_KEY")
 # ==========================================
 
-# Создаем Flask-приложение для Render (заглушка)
 app = Flask(__name__)
 
 @app.route('/')
@@ -121,14 +120,26 @@ async def handle_ai(message: types.Message):
             if response.status_code == 200:
                 data = response.json()
                 results = []
+                
+                # УНИВЕРСАЛЬНАЯ ОБРАБОТКА (словарь или список)
                 if "44" in data:
-                    for reg_num, tender in data["44"].items():
-                        results.append({
-                            "regNumber": reg_num,
-                            "name": tender.get("Продукт", "Без названия"),
-                            "maxPrice": tender.get("Сумма", "?"),
-                            "date": tender.get("ДатаПубл", "?")
-                        })
+                    group = data["44"]
+                    if isinstance(group, dict):
+                        for reg_num, tender in group.items():
+                            results.append({
+                                "regNumber": reg_num,
+                                "name": tender.get("Продукт", "Без названия"),
+                                "maxPrice": tender.get("Сумма", "?"),
+                                "date": tender.get("ДатаПубл", "?")
+                            })
+                    elif isinstance(group, list):
+                        for tender in group:
+                            results.append({
+                                "regNumber": tender.get("regNumber", "?"),
+                                "name": tender.get("product", "Без названия"),
+                                "maxPrice": tender.get("maxPrice", "?"),
+                                "date": tender.get("publishDate", "?")
+                            })
                 
                 if not results:
                     await msg.edit_text(f"По запросу '{query}' ничего не найдено.")
@@ -164,8 +175,6 @@ def run_bot():
 
 if __name__ == "__main__":
     import threading
-    # Запускаем бота в отдельном потоке
     threading.Thread(target=run_bot, daemon=True).start()
-    # Запускаем Flask в основном потоке для Render
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
