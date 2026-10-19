@@ -5,16 +5,9 @@ import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiohttp import web
 
 BOT_TOKEN = "8546161737:AAGD5lxNL8cmt7nIkfBY-dlQyShscbgyqsw"
 DAMIA_KEY = "1174ab6b3317737c801bed5996269efd852417d9"
-
-# URL вашего сервиса на Render (я вижу его на скриншоте)
-WEBHOOK_HOST = "https://zakupki-bot-ai.onrender.com" 
-WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
@@ -22,7 +15,7 @@ dp = Dispatcher()
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("Привет! Я бот для поиска закупок через DaMIA. Отправь команду:\n/search <товар> (например: /search медбол)")
+    await message.answer("Привет! Я бот для поиска закупок. Отправь команду:\n/search <товар> (например: /search медбол)")
 
 @dp.message(Command("search"))
 async def cmd_search(message: types.Message):
@@ -66,23 +59,11 @@ async def cmd_search(message: types.Message):
     except Exception as e:
         await msg.edit_text(f"❌ Ошибка: {str(e)}")
 
-async def on_startup(app):
-    await bot.set_webhook(WEBHOOK_URL)
-    logging.info(f"Webhook установлен на {WEBHOOK_URL}")
-
-async def on_shutdown(app):
-    await bot.delete_webhook()
-
-def main():
-    app = web.Application()
-    app.on_startup.append(on_startup)
-    app.on_shutdown.append(on_shutdown)
-    
-    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
-    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
-    
-    port = int(os.environ.get("PORT", 10000))
-    web.run_app(app, host="0.0.0.0", port=port)
+async def main():
+    print("Бот запущен (Long Polling)!")
+    # Удаляем вебхук, чтобы перейти на Long Polling
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
