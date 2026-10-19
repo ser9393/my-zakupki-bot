@@ -10,11 +10,11 @@ from openai import AsyncOpenAI
 from flask import Flask
 
 # ==========================================
-# ВАШИ КЛЮЧИ
-TELEGRAM_TOKEN = "8993348006:AAFgiXgZCJJ1SfrVHL8cduhTy9Y-sTIQBLE"
-YANDEX_API_KEY = "AQVN2G826r5pm5y-5dYDLmMXhd6tAXz31trEXpIN"
-YANDEX_FOLDER_ID = "b1gmi210bm62jeiv38j9"
-DAMIA_API_KEY = "1174ab6b3317737c801bed5996269efd852417d9"
+# КЛЮЧИ БЕРУТСЯ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ RENDER
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+YANDEX_API_KEY = os.getenv("YANDEX_API_KEY")
+YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
+DAMIA_API_KEY = os.getenv("DAMIA_API_KEY")
 # ==========================================
 
 # Создаем Flask-приложение для Render (заглушка)
